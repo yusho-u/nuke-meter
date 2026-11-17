@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#15171d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>音抜けメーター</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+/* layout: 1カラムの計測シート。上から「録る → 判定 → 比べる」。暗いスタジオで読める単一ダークテーマ。 */
+:root{
+  color-scheme: dark;
+  --bg:#15171d;
+  --panel:#1f232c;
+  --line:#343a47;
+  --ink:#eef0f3;
+  --mute:#9aa3b2;
+  --accent:#7fc8e0;      /* ギター */
+  --band:#566074;        /* バンド */
+  --good:#58c79a;
+  --edge:#f0b450;
+  --harsh:#ef6b5e;
+  --f-display:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic",sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-display);font-weight:500;font-size:15px;line-height:1.65;-webkit-text-size-adjust:100%}
+main{max-width:560px;margin:0 auto;padding:20px 16px 48px;display:flex;flex-direction:column;gap:16px}
+h1{font-size:24px;font-weight:900;margin:0;letter-spacing:.02em}
+h2{font-size:15px;font-weight:700;margin:0;text-wrap:balance}
+p{margin:0}
+.lead{color:var(--mute);font-size:13px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.step{display:flex;align-items:baseline;gap:8px}
+.step b{font-family:var(--f-num);font-size:12px;color:var(--bg);background:var(--mute);border-radius:4px;padding:0 6px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{font:inherit;font-weight:700;color:var(--bg);background:var(--accent);border:0;border-radius:8px;padding:11px 14px;min-height:44px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;text-align:center}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);font-weight:500}
+.btn.small{min-height:36px;padding:6px 10px;font-size:13px}
+.btn:focus-visible,input:focus-visible,.take:focus-visible{outline:2px solid var(--edge);outline-offset:2px}
+.btn[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+label.file{position:relative;overflow:hidden}
+label.file input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
+input[type=text]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-height:44px;flex:1;min-width:0}
+.status{font-size:13px;color:var(--mute);overflow-wrap:anywhere}
+.status.warn{color:var(--edge)}
+.status.err{color:var(--harsh)}
+.readouts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.read{background:var(--bg);border-radius:8px;padding:10px 12px;border-left:4px solid var(--line)}
+.read .k{font-size:12px;color:var(--mute)}
+.read .v{font-family:var(--f-num);font-size:30px;font-weight:600;line-height:1.2;font-variant-numeric:tabular-nums}
+.read .v small{font-size:13px;color:var(--mute);font-weight:500}
+.read .s{font-size:12px;color:var(--mute)}
+.pill{align-self:flex-start;font-weight:700;font-size:14px;border-radius:999px;padding:3px 12px;color:var(--bg);background:var(--mute)}
+.pill.good{background:var(--good)}.pill.edge{background:var(--edge)}.pill.harsh{background:var(--harsh)}
+.tag{font-size:11px;font-weight:700;border:1px solid var(--line);border-radius:4px;padding:0 5px;color:var(--mute);white-space:nowrap}
+canvas{display:block;width:100%;border-radius:8px;background:var(--bg)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--mute)}
+.legend i{display:inline-block;width:14px;height:4px;border-radius:2px;margin-right:5px;vertical-align:middle}
+ul.tips{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;font-size:14px}
+ul.tips li{padding-left:12px;border-left:3px solid var(--line)}
+ul.tips li.good{border-color:var(--good)}ul.tips li.edge{border-color:var(--edge)}ul.tips li.harsh{border-color:var(--harsh)}
+.takes{display:flex;flex-direction:column;gap:6px}
+.take{display:grid;grid-template-columns:26px 1fr auto auto;gap:8px;align-items:center;background:var(--bg);border:1px solid transparent;border-radius:8px;padding:8px 10px;cursor:pointer;font:inherit;color:inherit;text-align:left;width:100%}
+.take.sel{border-color:var(--accent)}
+.take .n{font-family:var(--f-num);font-size:13px;color:var(--mute)}
+.take .name{overflow-wrap:anywhere;font-size:14px}
+.take .nums{font-family:var(--f-num);font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums;white-space:nowrap}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--mute)}
+.dot.good{background:var(--good)}.dot.edge{background:var(--edge)}.dot.harsh{background:var(--harsh)}
+ol.how{margin:0;padding-left:20px;font-size:13px;color:var(--mute);display:flex;flex-direction:column;gap:4px}
+textarea{width:100%;min-height:110px;font-family:var(--f-num);font-size:12px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px}
+.btn.rec{background:var(--harsh);color:var(--bg)}
+.btn.rec.on{background:var(--ink);color:var(--bg)}
+.btn:disabled{opacity:.4;cursor:default}
+.meter{display:flex;align-items:center;gap:10px}
+.meter .bar{flex:1;height:10px;background:var(--bg);border-radius:5px;overflow:hidden}
+.meter .bar i{display:block;height:100%;width:0;background:var(--good)}
+.meter .bar i.hot{background:var(--harsh)}
+.meter .t{font-family:var(--f-num);font-size:13px;min-width:5em;text-align:right;font-variant-numeric:tabular-nums}
+.banner{font-size:13px;color:var(--edge);border:1px solid var(--edge);border-radius:8px;padding:8px 10px;margin-top:10px}
+[hidden]{display:none!important}
+@media (max-width:380px){.read .v{font-size:25px}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>音抜けメーター</h1>
+    <p class="lead">バンドの中でギターがどれだけ聞こえるかと、どれだけ耳に痛いかを別々に測ります。痛くなる手前で一番抜ける設定を探すための道具です。</p>
+    <p id="nosecure" class="banner" hidden>マイク録音は https のページでだけ使えます。いまはファイル読み込みだけ使えます。</p>
+  </header>
+
+  <section class="card" aria-labelledby="h-band">
+    <div class="step"><b>1</b><h2 id="h-band">ギター抜きでバンドを10〜20秒録る</h2></div>
+    <div class="row">
+      <button id="rec-band" class="btn rec" type="button">● 録音する</button>
+      <label class="btn ghost file">ファイルから<input id="in-band" type="file" accept="audio/*,video/*"></label>
+    </div>
+    <div class="meter" id="mt-band" hidden><div class="bar"><i></i></div><span class="t">0.0 秒</span></div>
+    <p id="st-band" class="status"></p>
+  </section>
+
+  <section class="card" aria-labelledby="h-gtr">
+    <div class="step"><b>2</b><h2 id="h-gtr">同じ場所でギターだけを録る</h2></div>
+    <div class="row">
+      <input id="in-label" type="text" placeholder="設定メモ（例: T5 M7 P3 / BD-2 TONE10時）" autocomplete="off">
+    </div>
+    <div class="row">
+      <button id="rec-gtr" class="btn rec" type="button">● 録音する</button>
+      <label class="btn ghost file">ファイルから<input id="in-gtr" type="file" accept="audio/*,video/*"></label>
+    </div>
+    <div class="meter" id="mt-gtr" hidden><div class="bar"><i></i></div><span class="t">0.0 秒</span></div>
+    <p id="st-gtr" class="status"></p>
+  </section>
+
+  <section class="card" aria-labelledby="h-res">
+    <div class="row" style="justify-content:space-between">
+      <h2 id="h-res">判定</h2>
+      <span id="res-name" class="status"></span>
+    </div>
+    <span id="pill" class="pill">—</span>
+    <div class="readouts">
+      <div class="read" id="rd-cut">
+        <div class="k">抜けゲイン</div>
+        <div class="v"><span id="v-cut">—</span> <small>dB</small></div>
+        <div class="s">音色だけで稼いだ聞こえやすさ</div>
+      </div>
+      <div class="read" id="rd-sharp">
+        <div class="k">キンキン度</div>
+        <div class="v"><span id="v-sharp">—</span> <small>acum</small></div>
+        <div class="s">境目 <span id="v-thr">—</span> まで <span id="v-margin">—</span></div>
+      </div>
+    </div>
+    <canvas id="cv-spec" data-h="200" role="img" aria-label="バンドとギターの帯域別の強さ"></canvas>
+    <div class="legend">
+      <span><i style="background:var(--band)"></i>バンド</span>
+      <span><i style="background:var(--accent)"></i>ギター（音量をそろえて比較）</span>
+      <span><i style="background:var(--good)"></i>抜けている帯域</span>
+    </div>
+    <ul id="tips" class="tips"></ul>
+    <div>
+      <p class="status" style="margin-bottom:6px">耳で聞いた印象を押すと、境目があなたの耳に合います。</p>
+      <div class="row" id="rate">
+        <button class="btn ghost small" data-r="harsh" aria-pressed="false">痛い</button>
+        <button class="btn ghost small" data-r="ok" aria-pressed="false">ちょうどいい</button>
+        <button class="btn ghost small" data-r="dull" aria-pressed="false">こもっている</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="h-map">
+    <h2 id="h-map">設定の比較</h2>
+    <p class="status">上にあるほど抜け、右にあるほど痛い音です。縦線の左側で一番上の点が「ギリギリ」です。</p>
+    <canvas id="cv-map" data-h="230" role="img" aria-label="設定ごとの抜けゲインとキンキン度"></canvas>
+    <div id="takes" class="takes"></div>
+    <div class="row">
+      <button id="btn-copy" class="btn ghost small">結果をコピー</button>
+      <button id="btn-del" class="btn ghost small">選択中を削除</button>
+      <button id="btn-clear" class="btn ghost small">全部消す</button>
+    </div>
+    <textarea id="copy-out" hidden readonly aria-label="結果のテキスト"></textarea>
+    <p id="st-copy" class="status"></p>
+  </section>
+
+  <section class="card" aria-labelledby="h-how">
+    <h2 id="h-how">正しく測るコツ</h2>
+    <ol class="how">
+      <li>録音ボタンを押してから演奏を始めて大丈夫です。音の小さい部分は自動で除きます。</li>
+      <li>スマホは客席側（アンプから3m以上、耳の高さ）に置き、1と2で動かさない。</li>
+      <li>1と2は同じ曲の同じ部分を弾く。サビなど一番音が厚いところがおすすめ。</li>
+      <li>つまみを変えたら2だけ録り直す。バンドの録音は使い回せます。</li>
+      <li>「音が割れています」と出たら、スマホをもっと離す。</li>
+      <li>抜けゲインとキンキン度は音量差を除いて計算しています。スマホの自動音量調整の影響を受けにくくするためです。</li>
+      <li>録音中に画面を切り替えると、そこで録音が止まります。</li>
+    </ol>
+    <p class="status">抜けゲイン: バンドと同じ音色のギターを0dBとして、今の音色が音量何dB分だけ聞こえやすいか。キンキン度: 聴覚モデルのシャープネス（高域に偏るほど大きい）。</p>
+  </section>
+</main>
+
+<script>
+/*ENGINE-START*/
+const ENG = (() => {
+  const ALPHA = 0.23, NB = 46;
+  const zc = i => 0.5 + 0.5 * i;                       // 帯域中心 (Bark)
+  const z2f = z => 1960 * (z + 0.53) / (26.28 - z);
+  const f2z = f => 26.81 * f / (1960 + f) - 0.53;
+  const fc = Array.from({length: NB}, (_, i) => z2f(zc(i)));
+  const db = x => 10 * Math.log10(x + 1e-30);
+  // 音の輪郭が伝わる 1〜4kHz を重めに数える（2kHz で2倍）
+  const W = fc.map(f => 1 + Math.exp(-Math.pow(Math.log2(f / 2000) / 1.2, 2)));
+
+  function fft(re, im) {
+    const n = re.length;
+    for (let i = 1, j = 0; i < n; i++) {
+      let bit = n >> 1;
+      for (; j & bit; bit >>= 1) j ^= bit;
+      j ^= bit;
+      if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+    }
+    for (let len = 2; len <= n; len <<= 1) {
+      const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+      for (let i = 0; i < n; i += len) {
+        let cr = 1, ci = 0;
+        for (let k = 0; k < len / 2; k++) {
+          const a = i + k, b = a + len / 2;
+          const xr = re[b] * cr - im[b] * ci, xi = re[b] * ci + im[b] * cr;
+          re[b] = re[a] - xr; im[b] = im[a] - xi; re[a] += xr; im[a] += xi;
+          const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t;
+        }
+      }
+    }
+  }
+
+  // 録音 → 0.5 Bark 幅の帯域エネルギー（静かな区間は除外）
+  function bandEnergies(x, sr) {
+    const N = 4096, H = 2048;
+    if (x.length < N * 4) throw new Error('short');
+    const win = new Float64Array(N);
+    for (let i = 0; i < N; i++) win[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / N);
+    const nf = Math.floor((x.length - N) / H) + 1;
+    const fp = new Float64Array(nf);
+    let pmax = 0, sq = 0, clip = 0, peak = 0;
+    for (let i = 0; i < x.length; i++) { const a = Math.abs(x[i]); sq += a * a; if (a > peak) peak = a; if (a >= 0.985) clip++; }
+    for (let f = 0; f < nf; f++) {
+      let s = 0; const o = f * H;
+      for (let i = 0; i < N; i += 4) s += x[o + i] * x[o + i];
+      fp[f] = s; if (s > pmax) pmax = s;
+    }
+    const gate = pmax * Math.pow(10, -2.5);
+    const acc = new Float64Array(N / 2), re = new Float64Array(N), im = new Float64Array(N);
+    let kept = 0;
+    for (let f = 0; f < nf; f++) {
+      if (fp[f] < gate) continue;
+      const o = f * H;
+      for (let i = 0; i < N; i++) { re[i] = x[o + i] * win[i]; im[i] = 0; }
+      fft(re, im);
+      for (let k = 0; k < N / 2; k++) acc[k] += re[k] * re[k] + im[k] * im[k];
+      kept++;
+    }
+    const E = new Array(NB).fill(0);
+    for (let k = 1; k < N / 2; k++) {
+      const idx = Math.floor((f2z(k * sr / N) - 0.25) / 0.5);
+      if (idx >= 0 && idx < NB) E[idx] += acc[k] / Math.max(1, kept);
+    }
+    return { E, sec: x.length / sr, rmsDb: db(sq / x.length), peak, clipRatio: clip / x.length, activeRatio: kept / nf };
+  }
+
+  // 隣の帯域へのマスキングの広がり（上方向に広く、下方向に狭い）
+  function spread(E) {
+    const X = new Array(NB).fill(0);
+    for (let i = 0; i < NB; i++) for (let j = 0; j < NB; j++) {
+      const dz = zc(i) - zc(j);
+      X[i] += E[j] * Math.pow(10, (dz >= 0 ? -12 * dz : 27 * dz) / 10);
+    }
+    return X;
+  }
+
+  function sharpness(Xg) {
+    const e0 = 1e-5 * Math.max(...Xg);
+    let num = 0, den = 0, hi = 0;
+    for (let i = 0; i < NB; i++) {
+      const z = zc(i), n = Math.pow(Xg[i] / e0 + 1, ALPHA) - 1;
+      const g = z <= 15.8 ? 1 : 0.15 * Math.exp(0.42 * (z - 15.8)) + 0.85;
+      num += n * g * z; den += n;
+      if (fc[i] >= 4000) hi += n * g * z;
+    }
+    return { S: 0.11 * num / (den + 1e-30), hiShare: hi / (num + 1e-30) };
+  }
+
+  const REGIONS = [[60, 250, '60〜250Hz'], [250, 700, '250〜700Hz'], [700, 1400, '700Hz〜1.4kHz'],
+                   [1400, 2800, '1.4〜2.8kHz'], [2800, 5000, '2.8〜5kHz'], [5000, 16000, '5kHz以上']];
+
+  // Em: バンドの帯域エネルギー, Eg: ギターの帯域エネルギー
+  function analyze(Em, Eg, opt = {}) {
+    const sumM = Em.reduce((a, b) => a + b, 0), sumG = Eg.reduce((a, b) => a + b, 0);
+    const levelDiff = db(sumG / sumM);
+    const level = opt.actual ? levelDiff : -3;            // 既定は音量差をそろえる
+    const k = sumM * Math.pow(10, level / 10) / sumG;
+    const Xm = spread(Em), Xg = spread(Eg).map(v => v * k);
+    const e0 = 1e-5 * Math.max(Math.max(...Xm), Math.max(...Xg));
+    const L = v => Math.pow(v / e0 + 1, ALPHA);
+    const Np = [], Nu = [], smr = [];
+    let sp = 0, su = 0, P = 0;
+    for (let i = 0; i < NB; i++) {
+      Np[i] = L(Xg[i] + Xm[i]) - L(Xm[i]); Nu[i] = L(Xg[i]) - 1;
+      sp += Np[i]; su += Nu[i]; P += W[i] * Np[i]; smr[i] = db(Xg[i] / (Xm[i] + 1e-30));
+    }
+    const R = sp / (su + 1e-30);
+    // バンドと同じ音色のギターが、同じ「埋もれずに残る大きさ」を得るのに必要な音量 → 差が「抜けゲイン」
+    const Pref = xdb => { const x = Math.pow(10, xdb / 10); let p = 0;
+      for (let i = 0; i < NB; i++) p += W[i] * (L(Xm[i] * (1 + x)) - L(Xm[i])); return p; };
+    let lo = -40, hi = 40;
+    for (let it = 0; it < 40; it++) { const mid = (lo + hi) / 2; if (Pref(mid) < P) lo = mid; else hi = mid; }
+    const cutGain = (lo + hi) / 2 - level;
+    const sh = sharpness(Xg);
+    const mAll = Xm.reduce((a, v) => a + db(v), 0) / NB;
+    const regions = REGIONS.map(([f0, f1, name]) => {
+      let p = 0, u = 0, m = 0, n = 0, s = 0;
+      for (let i = 0; i < NB; i++) if (fc[i] >= f0 && fc[i] < f1) { p += Np[i]; u += Nu[i]; m += db(Xm[i]); s += smr[i]; n++; }
+      return { name, f0, share: u / (su + 1e-30), kept: p / (u + 1e-30), bandRel: m / n - mAll, smr: s / n };
+    });
+    return { cutGain, R, S: sh.S, hiShare: sh.hiShare, levelDiff, XmDb: Xm.map(db), XgDb: Xg.map(db), smr, regions };
+  }
+
+  // 耳の評価から「痛くなる境目」を決める
+  function threshold(takes, def) {
+    const ok = takes.filter(t => t.rating === 'ok' || t.rating === 'dull').map(t => t.S);
+    const harsh = takes.filter(t => t.rating === 'harsh').map(t => t.S);
+    if (ok.length && harsh.length) return (Math.max(...ok) + Math.min(...harsh)) / 2;
+    if (harsh.length) return Math.min(...harsh) - 0.05;
+    if (ok.length) return Math.max(def, Math.max(...ok) + 0.1);
+    return def;
+  }
+
+  return { NB, zc, z2f, f2z, fc, db, bandEnergies, spread, sharpness, analyze, threshold, REGIONS };
+})();
+/*ENGINE-END*/
+
+/* ---------- サンプル（最初に表示する例。自分の録音を入れると消える） ---------- */
+const SAMPLE = (() => {
+  const bell = (f, f0, g, w) => g * Math.exp(-Math.pow(Math.log2(f / f0) / w, 2));
+  const shelf = (f, f0, g) => g / (1 + Math.pow(f0 / f, 3));
+  const lp = (f, f0, o) => -10 * Math.log10(1 + Math.pow(f / f0, 2 * o));
+  const hp = (f, f0, o) => -10 * Math.log10(1 + Math.pow(f0 / f, 2 * o));
+  const mk = fn => ENG.fc.map((f, i) => Math.pow(10, fn(f) / 10) * (ENG.z2f(ENG.zc(i) + .25) - ENG.z2f(ENG.zc(i) - .25)));
+  const band = mk(f => -10 * Math.log10(f / 100) + bell(f, 90, 9, 1) + bell(f, 300, 3, 1) + bell(f, 3000, 4, .8) + shelf(f, 7000, 6) + lp(f, 13000, 3));
+  const g0 = f => -10 * Math.log10(f / 100) + hp(f, 130, 2) + bell(f, 3500, 5, .6) + lp(f, 5200, 3);
+  return { band, takes: [
+    ['例: BD-2 TONE 12時', mk(g0)],
+    ['例: TONE 3時＋トレブル8', mk(f => g0(f) + shelf(f, 2800, 8) + bell(f, 6000, 5, .7))],
+    ['例: TONE 10時＋EQで1.6kHz', mk(f => g0(f) - shelf(f, 2800, 3) + bell(f, 1500, 6, .6))]
+  ] };
+})();
+
+/* ---------- 状態 ---------- */
+const DEF_T = 1.85, KEY = 'nuke-meter-v1';
+const $ = id => document.getElementById(id);
+let S = { band: null, takes: [], sel: null, sample: true };
+function load() { try { const d = JSON.parse(localStorage.getItem(KEY)); if (d && d.band && Array.isArray(d.takes)) S = d; } catch (e) {} }
+function save() { try { if (!S.sample) localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+function seedSample() {
+  S = { band: { E: SAMPLE.band, name: 'サンプル' }, sample: true, sel: 3,
+        takes: SAMPLE.takes.map(([label, E], i) => ({ id: i + 1, label, E, rating: i === 1 ? 'harsh' : i === 2 ? 'ok' : null })) };
+}
+function recompute() {
+  if (!S.band) return;
+  for (const t of S.takes) { const r = ENG.analyze(S.band.E, t.E); t.S = r.S; t.cut = r.cutGain; t.res = r; }
+}
+const thr = () => ENG.threshold(S.takes, DEF_T);
+function verdict(t, T) {
+  if (t.S > T) return ['harsh', 'キンキン'];
+  if (T - t.S <= 0.12) return ['edge', 'ギリギリ'];
+  return ['good', 'まだ余裕あり'];
+}
+
+/* ---------- 音声の読み込み ---------- */
+let actx = null;
+async function decode(file) {
+  const buf = await file.arrayBuffer();
+  if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+  const ab = await new Promise((ok, ng) => { const p = actx.decodeAudioData(buf, ok, ng); if (p && p.catch) p.catch(ng); });
+  const n = Math.min(ab.length, Math.floor(ab.sampleRate * 60));
+  const x = new Float32Array(n);
+  for (let c = 0; c < ab.numberOfChannels; c++) { const d = ab.getChannelData(c); for (let i = 0; i < n; i++) x[i] += d[i] / ab.numberOfChannels; }
+  return ENG.bandEnergies(x, ab.sampleRate);
+}
+function describe(m) {
+  const w = [];
+  if (m.clipRatio > 0.001 || m.peak >= 0.999) w.push('音が割れています。スマホをもっと離して録り直してください。');
+  if (m.sec < 6) w.push('短すぎます。10秒以上録ると安定します。');
+  if (m.rmsDb < -45) w.push('音がかなり小さいです。');
+  return { text: `${m.sec.toFixed(0)}秒・平均 ${m.rmsDb.toFixed(0)} dBFS` + (w.length ? '。' + w.join(' ') : ''), warn: w.length > 0 };
+}
+async function onFile(input, st, cb) {
+  const f = input.files && input.files[0]; input.value = '';
+  if (!f) return;
+  st.className = 'status'; st.textContent = '解析中…';
+  try { const m = await decode(f); const d = describe(m); st.textContent = d.text; st.className = 'status' + (d.warn ? ' warn' : ''); cb(m, f.name); }
+  catch (e) {
+    st.className = 'status err';
+    st.textContent = e && e.message === 'short' ? '録音が短すぎます。10秒以上で録り直してください。'
+      : 'このファイルは読めませんでした。ボイスメモ（m4a）か動画（mp4/mov）で試してください。';
+  }
+}
+function useBand(m, name) {
+  if (S.sample) { S.takes = []; S.sel = null; S.sample = false; }
+  S.band = { E: m.E, name }; recompute(); save(); render();
+  if (!S.takes.length) { $('st-gtr').className = 'status'; $('st-gtr').textContent = '次にギターだけを録ってください。'; }
+}
+function useGtr(m) {
+  const id = S.takes.reduce((a, t) => Math.max(a, t.id), 0) + 1;
+  S.takes.push({ id, label: $('in-label').value.trim() || `設定 ${id}`, E: m.E, rating: null });
+  S.sel = id; $('in-label').value = ''; recompute(); save(); render();
+}
+function needBand() {
+  if (S.band && !S.sample) return false;
+  $('st-gtr').className = 'status err'; $('st-gtr').textContent = '先に1でバンドを録ってください。'; return true;
+}
+$('in-band').addEventListener('change', e => onFile(e.target, $('st-band'), useBand));
+$('in-gtr').addEventListener('change', e => {
+  if (needBand()) { e.target.value = ''; return; }
+  onFile(e.target, $('st-gtr'), m => useGtr(m));
+});
+
+/* ---------- マイク録音 ---------- */
+const MAX_SEC = 30;
+const R = { on: null };
+const canRec = !!(window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+function setRecUI() {
+  for (const k of ['band', 'gtr']) {
+    const b = $('rec-' + k), on = R.on === k;
+    b.hidden = !canRec; b.disabled = !!R.on && !on;
+    b.classList.toggle('on', on); b.textContent = on ? '■ 止めて判定' : '● 録音する';
+    $('mt-' + k).hidden = !on;
+  }
+}
+async function startRec(k) {
+  const st = $('st-' + k);
+  if (k === 'gtr' && needBand()) return;
+  try {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    const resumed = actx.resume();            // iOS はタップの直後に呼ぶ必要がある
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
+    await resumed; await actx.resume();
+    const src = actx.createMediaStreamSource(stream);
+    const node = actx.createScriptProcessor(4096, 1, 1);
+    const sink = actx.createGain(); sink.gain.value = 0;   // スピーカーには出さない
+    Object.assign(R, { on: k, stream, src, node, sink, chunks: [], n: 0, peak: 0, sr: actx.sampleRate });
+    node.onaudioprocess = e => {
+      if (R.on !== k) return;
+      const d = e.inputBuffer.getChannelData(0); let p = 0;
+      for (let i = 0; i < d.length; i++) { const a = Math.abs(d[i]); if (a > p) p = a; }
+      R.chunks.push(new Float32Array(d)); R.n += d.length;
+      R.peak = Math.max(p, R.peak * 0.85);
+      if (R.n >= R.sr * MAX_SEC) stopRec();
+    };
+    src.connect(node); node.connect(sink); sink.connect(actx.destination);
+    st.className = 'status'; st.textContent = `録音中です。演奏が終わったら止めてください（${MAX_SEC}秒で自動で止まります）。`;
+    setRecUI(); tick();
+  } catch (e) {
+    R.on = null; setRecUI();
+    st.className = 'status err';
+    st.textContent = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')
+      ? 'マイクの使用が許可されていません。ブラウザの設定でこのサイトのマイクを許可してください。'
+      : 'マイクを開けませんでした。ほかのアプリがマイクを使っていないか確認してください。';
+  }
+}
+function tick() {
+  if (!R.on) return;
+  const mt = $('mt-' + R.on), bar = mt.querySelector('i');
+  bar.style.width = Math.min(100, Math.max(0, (20 * Math.log10(R.peak + 1e-9) + 60) / 60 * 100)) + '%';
+  bar.classList.toggle('hot', R.peak > 0.95);
+  mt.querySelector('.t').textContent = (R.n / R.sr).toFixed(1) + ' 秒';
+  requestAnimationFrame(tick);
+}
+function stopRec() {
+  const k = R.on; if (!k) return;
+  R.on = null;
+  R.node.onaudioprocess = null;
+  try { R.src.disconnect(); R.node.disconnect(); R.sink.disconnect(); } catch (e) {}
+  const tr = R.stream.getAudioTracks()[0];
+  const set = tr && tr.getSettings ? tr.getSettings() : {};
+  R.stream.getTracks().forEach(t => t.stop());
+  setRecUI();
+  const x = new Float32Array(R.n); let o = 0;
+  for (const c of R.chunks) { x.set(c, o); o += c.length; }
+  R.chunks = [];
+  const st = $('st-' + k);
+  try {
+    const m = ENG.bandEnergies(x, R.sr), d = describe(m);
+    const note = (set.noiseSuppression || set.echoCancellation) ? ' このスマホではノイズ除去を切れませんでした。結果が少しずれることがあります。' : '';
+    st.className = 'status' + (d.warn || note ? ' warn' : ''); st.textContent = d.text + note;
+    if (k === 'band') useBand(m, 'マイク録音 ' + new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }));
+    else useGtr(m);
+  } catch (e) {
+    st.className = 'status err'; st.textContent = '録音が短すぎます。10秒以上録ってください。';
+  }
+}
+for (const k of ['band', 'gtr']) $('rec-' + k).addEventListener('click', () => R.on === k ? stopRec() : startRec(k));
+document.addEventListener('visibilitychange', () => { if (document.hidden && R.on) stopRec(); });
+$('nosecure').hidden = canRec;
+setRecUI();
+
+/* ---------- 描画 ---------- */
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function setup(cv) {
+  const r = window.devicePixelRatio || 1, w = cv.clientWidth, h = +cv.dataset.h;
+  cv.width = w * r; cv.height = h * r; cv.style.height = h + 'px';
+  const c = cv.getContext('2d'); c.setTransform(r, 0, 0, r, 0, 0); c.clearRect(0, 0, w, h);
+  c.font = '11px ' + css('--f-num'); return [c, w, h];
+}
+function drawSpec(t) {
+  const [c, w, h] = setup($('cv-spec'));
+  if (!t) return;
+  const L = 8, Rr = 8, T0 = 10, B = 22, pw = w - L - Rr, ph = h - T0 - B;
+  const m = t.res.XmDb, g = t.res.XgDb, top = Math.max(...m, ...g) + 3, bot = top - 45;
+  const X = i => L + pw * (ENG.zc(i) - 0.5) / 22.5, Y = v => T0 + ph * (1 - (Math.max(bot, v) - bot) / (top - bot));
+  const Xf = f => L + pw * (ENG.f2z(f) - 0.5) / 22.5;
+  c.strokeStyle = css('--line'); c.fillStyle = css('--mute'); c.lineWidth = 1; c.textAlign = 'center';
+  for (const [f, s] of [[200, '200'], [500, '500'], [1000, '1k'], [2000, '2k'], [4000, '4k'], [8000, '8k']]) {
+    const x = Math.round(Xf(f)) + .5; c.globalAlpha = .5; c.beginPath(); c.moveTo(x, T0); c.lineTo(x, T0 + ph); c.stroke(); c.globalAlpha = 1;
+    c.fillText(s, x, h - 7);
+  }
+  c.textAlign = 'right'; c.fillText('Hz', w - Rr, h - 7);
+  c.fillStyle = css('--band'); c.globalAlpha = .55; c.beginPath(); c.moveTo(X(0), T0 + ph);
+  for (let i = 0; i < ENG.NB; i++) c.lineTo(X(i), Y(m[i])); c.lineTo(X(ENG.NB - 1), T0 + ph); c.fill(); c.globalAlpha = 1;
+  c.fillStyle = css('--good'); c.globalAlpha = .35;
+  for (let i = 0; i < ENG.NB - 1; i++) if (g[i] > m[i] && g[i + 1] > m[i + 1]) {
+    c.beginPath(); c.moveTo(X(i), Y(m[i])); c.lineTo(X(i), Y(g[i])); c.lineTo(X(i + 1), Y(g[i + 1])); c.lineTo(X(i + 1), Y(m[i + 1])); c.fill();
+  }
+  c.globalAlpha = 1; c.strokeStyle = css('--accent'); c.lineWidth = 2; c.lineJoin = 'round'; c.beginPath();
+  for (let i = 0; i < ENG.NB; i++) i ? c.lineTo(X(i), Y(g[i])) : c.moveTo(X(i), Y(g[i])); c.stroke();
+}
+function drawMap(T) {
+  const [c, w, h] = setup($('cv-map'));
+  const ts = S.takes; if (!ts.length) { c.fillStyle = css('--mute'); c.textAlign = 'center'; c.fillText('ギターを録ると点が増えます', w / 2, h / 2); return; }
+  const L = 40, Rr = 12, T0 = 12, B = 30, pw = w - L - Rr, ph = h - T0 - B;
+  const xs = ts.map(t => t.S).concat(T), ys = ts.map(t => t.cut);
+  const x0 = Math.min(...xs) - .25, x1 = Math.max(...xs) + .25;
+  const y0 = Math.floor(Math.min(...ys) - 1.5), y1 = Math.ceil(Math.max(...ys) + 1.5);
+  const X = v => L + pw * (v - x0) / (x1 - x0), Y = v => T0 + ph * (1 - (v - y0) / (y1 - y0));
+  c.fillStyle = css('--harsh'); c.globalAlpha = .12; c.fillRect(X(T), T0, L + pw - X(T), ph); c.globalAlpha = 1;
+  c.strokeStyle = css('--line'); c.fillStyle = css('--mute'); c.lineWidth = 1;
+  const stepY = (y1 - y0) > 10 ? 4 : 2;
+  c.textAlign = 'right';
+  for (let v = Math.ceil(y0 / stepY) * stepY; v <= y1; v += stepY) { const y = Math.round(Y(v)) + .5; c.globalAlpha = .5; c.beginPath(); c.moveTo(L, y); c.lineTo(L + pw, y); c.stroke(); c.globalAlpha = 1; c.fillText((v > 0 ? '+' : '') + v, L - 6, y + 4); }
+  c.textAlign = 'center';
+  const stepX = (x1 - x0) > 1.6 ? .5 : .25;
+  for (let v = Math.ceil(x0 / stepX) * stepX; v <= x1; v += stepX) c.fillText(v.toFixed(2), X(v), h - 16);
+  c.textAlign = 'left'; c.fillText('抜け dB', 2, 10); c.textAlign = 'right'; c.fillText('キンキン度 →', w - Rr, h - 3);
+  c.strokeStyle = css('--harsh'); c.lineWidth = 1.5; c.setLineDash([5, 4]); c.beginPath(); c.moveTo(X(T), T0); c.lineTo(X(T), T0 + ph); c.stroke(); c.setLineDash([]);
+  c.fillStyle = css('--harsh'); c.textAlign = X(T) > w - 110 ? 'right' : 'left'; c.fillText('痛くなる境目', X(T) + (c.textAlign === 'left' ? 5 : -5), T0 + 11);
+  const best = bestTake(T);
+  for (const t of ts) {
+    const [k] = verdict(t, T), x = X(t.S), y = Y(t.cut);
+    c.fillStyle = css('--' + k); c.beginPath(); c.arc(x, y, 6, 0, 7); c.fill();
+    if (best && best.id === t.id) { c.strokeStyle = css('--ink'); c.lineWidth = 2; c.beginPath(); c.arc(x, y, 10, 0, 7); c.stroke(); }
+    if (S.sel === t.id) { c.strokeStyle = css('--accent'); c.lineWidth = 1.5; c.beginPath(); c.arc(x, y, 14, 0, 7); c.stroke(); }
+    c.fillStyle = css('--ink'); c.textAlign = 'center'; c.fillText(String(t.id), x, y - 17 < T0 + 8 ? y + 24 : y - 17);
+  }
+}
+const bestTake = T => S.takes.filter(t => t.S <= T).sort((a, b) => b.cut - a.cut)[0] || null;
+const fmt = (v, d = 1) => (v > 0 ? '+' : '') + v.toFixed(d);
+
+function tipsFor(t, T) {
+  const out = [], rg = t.res.regions, mid = rg.slice(2, 5);
+  const gap = mid.slice().sort((a, b) => a.bandRel - b.bandRel)[0];
+  if (gap.smr > 3) out.push(['good', `${gap.name} はバンドが薄く、ギターがすでに抜けています。ここは維持してください。`]);
+  else out.push(['good', `バンドの隙間は ${gap.name} です。ここを足すと少ない音量で抜けます。`]);
+  const bur = rg.filter(r => r.share > 0.14 && r.kept < 0.6 * t.res.R).sort((a, b) => a.kept - b.kept)[0];
+  if (bur) out.push(['edge', `${bur.name} はバンドと被っていて、ほかの帯域より埋もれています。ここを上げても抜けにくいです。`]);
+  const hi = Math.round(t.res.hiShare * 100);
+  if (t.S > T) out.push(['harsh', `痛さの${hi}%は4kHz以上から来ています。プレゼンスか歪みペダルのTONEを下げてください。`]);
+  else if (T - t.S <= 0.12) out.push(['edge', 'これ以上高域を足すと痛くなります。抜けを足すなら中域で。']);
+  else out.push(['good', `高域は境目まで ${(T - t.S).toFixed(2)} acum の余裕があります。`]);
+  return out;
+}
+
+function render() {
+  const T = thr(), t = S.takes.find(x => x.id === S.sel) || S.takes[S.takes.length - 1] || null;
+  if (S.band && !$('st-band').textContent) $('st-band').textContent = S.sample ? 'いまはサンプルを表示しています。自分の録音を入れると置き換わります。' : `読み込み済み: ${S.band.name}`;
+  $('v-thr').textContent = T.toFixed(2) + (S.takes.some(x => x.rating) ? '' : '（仮）');
+  if (t) {
+    const [k, word] = verdict(t, T), best = bestTake(T);
+    $('res-name').textContent = `${t.id}. ${t.label}`;
+    $('pill').className = 'pill ' + k; $('pill').textContent = word + (best && best.id === t.id && S.takes.length > 1 ? '・今のベスト' : '');
+    $('v-cut').textContent = fmt(t.cut); $('v-sharp').textContent = t.S.toFixed(2);
+    $('v-margin').textContent = t.S > T ? `${(t.S - T).toFixed(2)} 超過` : (T - t.S).toFixed(2);
+    $('rd-sharp').style.borderLeftColor = css('--' + k); $('rd-cut').style.borderLeftColor = css('--accent');
+    $('tips').innerHTML = ''; for (const [c, s] of tipsFor(t, T)) { const li = document.createElement('li'); li.className = c; li.textContent = s; $('tips').appendChild(li); }
+    document.querySelectorAll('#rate button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.r === t.rating)));
+  } else {
+    $('res-name').textContent = ''; $('pill').className = 'pill'; $('pill').textContent = 'ギターの録音待ち';
+    for (const id of ['v-cut', 'v-sharp', 'v-margin']) $(id).textContent = '—'; $('tips').innerHTML = '';
+  }
+  drawSpec(t); drawMap(T);
+  const box = $('takes'); box.innerHTML = '';
+  const RT = { harsh: '痛い', ok: 'ちょうどいい', dull: 'こもり' };
+  for (const x of S.takes) {
+    const [k] = verdict(x, T), b = document.createElement('button');
+    b.className = 'take' + (t && x.id === t.id ? ' sel' : ''); b.type = 'button';
+    b.innerHTML = '<span class="n"></span><span class="name"></span><span class="nums"></span><span class="dot ' + k + '"></span>';
+    b.children[0].textContent = x.id; b.children[1].textContent = x.label + (x.rating ? `（${RT[x.rating]}）` : '');
+    b.children[2].textContent = `${fmt(x.cut)}dB / ${x.S.toFixed(2)}`;
+    b.addEventListener('click', () => { S.sel = x.id; save(); render(); });
+    box.appendChild(b);
+  }
+}
+$('rate').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const t = S.takes.find(x => x.id === S.sel) || S.takes[S.takes.length - 1]; if (!t) return;
+  t.rating = t.rating === b.dataset.r ? null : b.dataset.r; save(); render();
+});
+$('btn-del').addEventListener('click', () => {
+  const t = S.takes.find(x => x.id === S.sel) || S.takes[S.takes.length - 1]; if (!t) return;
+  S.takes = S.takes.filter(x => x !== t); S.sel = S.takes.length ? S.takes[S.takes.length - 1].id : null; save(); render();
+});
+$('btn-clear').addEventListener('click', () => {
+  S = { band: null, takes: [], sel: null, sample: false };
+  try { localStorage.removeItem(KEY); } catch (e) {}
+  $('st-band').textContent = '消しました。1からバンドを録り直してください。'; $('st-gtr').textContent = ''; render();
+});
+$('btn-copy').addEventListener('click', async () => {
+  const T = thr();
+  const txt = ['番号\t設定\t抜けゲイン(dB)\tキンキン度(acum)\t判定\t耳の評価', ...S.takes.map(t =>
+    [t.id, t.label, fmt(t.cut), t.S.toFixed(2), verdict(t, T)[1], t.rating || ''].join('\t')), `境目\t${T.toFixed(2)} acum`].join('\n');
+  try { await navigator.clipboard.writeText(txt); $('st-copy').textContent = 'コピーしました。'; $('copy-out').hidden = true; }
+  catch (e) { $('copy-out').hidden = false; $('copy-out').value = txt; $('copy-out').select(); $('st-copy').textContent = '下の文字を選んでコピーしてください。'; }
+});
+
+load();
+if (!S.band) seedSample();
+recompute(); render();
+window.addEventListener('resize', render);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(render);
+</script>
+</body>
+</html>
